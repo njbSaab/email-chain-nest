@@ -9,9 +9,9 @@ import { EmailsModule } from './emails/emails.module';
     ConfigModule.forRoot({ isGlobal: true }),
     BullModule.forRoot({
       redis: {
-        host: '194.36.179.168',
-        port: 6379,
-        password: 'nano',
+        host: '',
+        port: ,
+        password: '',
       },
     }),
     PrismaModule,
