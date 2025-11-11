@@ -1,0 +1,180 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "mysql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+    id                 Int           @id @default(autoincrement())
+    name               String?
+    email              String?       @unique
+    createdAt          DateTime      @default(now())
+    uuid               String?       @unique
+    emailSequenceState Json?
+    geo                String?
+    UserResult         UserResult[]
+    UserSession        UserSession[]
+}
+
+model EmailTemplate {
+    id         Int    @id @default(autoincrement())
+    app        String
+    geo        String
+    sequenceId Int
+    step       Int
+    quizId     Int?
+    subject    String @db.VarChar(255)
+    html       String @db.Text
+    delayHours Int
+
+    @@unique([app, geo, sequenceId, step])
+}
+
+model EmailJob {
+    id                   Int                @id @default(autoincrement())
+    userUuid             String
+    templateId           Int
+    quizId               Int
+    chainType            EmailJob_chainType @default(PERSONAL)
+    quizCountAtStart     Int                @default(1)
+    status               String             @default("pending") @db.VarChar(50)
+    scheduledAt          DateTime
+    sentAt               DateTime?
+    attempts             Int                @default(0)
+    mergeWindowExpiresAt DateTime? // NULL если не в окне объединения
+    rootQuizId           Int? // ID первого квиза в объединённой цепочке
+
+    Quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_emailjob_quiz")
+
+    @@index([userUuid, mergeWindowExpiresAt])
+    @@index([rootQuizId])
+    @@index([userUuid])
+    @@index([status])
+    @@index([scheduledAt, status])
+    @@index([chainType], map: "idx_chainType")
+    @@index([quizId], map: "idx_quizId")
+}
+
+model Admin {
+    id        Int      @id @default(autoincrement())
+    email     String   @unique @db.VarChar(255)
+    password  String   @db.VarChar(255)
+    createdAt DateTime @default(now())
+}
+
+model Answer {
+    id         Int      @id @default(autoincrement())
+    questionId Int
+    text       String   @db.VarChar(255)
+    isCorrect  Boolean
+    points     Int
+    Question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+    @@index([questionId], map: "Answer_questionId_fkey")
+}
+
+model Category {
+    id   Int    @id @default(autoincrement())
+    name String @db.VarChar(100)
+    Quiz Quiz[]
+}
+
+model PendingQuizEmail {
+    id             Int       @id @default(autoincrement())
+    sessionId      String
+    quizId         Int
+    quizTitle      String
+    score          Int
+    correctAnswers Int
+    totalQuestions Int
+    sendAfter      DateTime
+    createdAt      DateTime  @default(now())
+    lastAttemptAt  DateTime?
+    retryCount     Int       @default(0)
+    resetCount     Int       @default(0)
+    answer         String?   @db.Text
+}
+
+model Question {
+    id     Int      @id @default(autoincrement())
+    quizId Int
+    text   String   @db.Text
+    order  Int?
+    image  String?  @db.VarChar(255)
+    Answer Answer[]
+    Quiz   Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+    @@index([quizId], map: "Question_quizId_fkey")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model Quiz {
+    id             Int           @id @default(autoincrement())
+    title          String        @db.VarChar(255)
+    titleAdm       String        @db.VarChar(255)
+    description    String?       @db.Text
+    descriptionAdm String?       @db.Text
+    descrip        String?       @db.Text
+    createdAt      DateTime      @default(now())
+    updatedAt      DateTime
+    categoryId     Int?
+    finalPage      String?       @db.Text
+    firstPage      String?       @db.Text
+    isActive       Boolean       @default(true)
+    previewImage   String?       @db.VarChar(255)
+    rating         Float?
+    resultMessages String?       @db.Text
+    quizShortTitle String        @db.VarChar(255)
+    quizInfo       String?       @db.Text
+    isMainView     Boolean       @default(false)
+    type           String        @default("POINTS") @db.VarChar(20)
+    EmailJob       EmailJob[]
+    Question       Question[]
+    Category       Category?     @relation(fields: [categoryId], references: [id])
+    UserResult     UserResult[]
+    UserSession    UserSession[]
+
+    @@index([categoryId], map: "Quiz_categoryId_fkey")
+}
+
+model UserResult {
+    id        Int      @id @default(autoincrement())
+    userId    String?
+    quizId    Int?
+    score     Int
+    answers   Json
+    sessionId String?
+    createdAt DateTime @default(now())
+    Quiz      Quiz?    @relation(fields: [quizId], references: [id])
+    User      User?    @relation(fields: [userId], references: [uuid])
+
+    @@index([quizId])
+    @@index([userId])
+}
+
+model UserSession {
+    id                   Int       @id @default(autoincrement())
+    quizId               Int?
+    userId               String?
+    sessionId            String    @unique
+    currentQuestionIndex Int       @default(0)
+    correctAnswersCount  Int       @default(0)
+    totalPoints          Int       @default(0)
+    answers              Json
+    browserInfo          Json
+    createdAt            DateTime  @default(now())
+    updatedAt            DateTime?
+    Quiz                 Quiz?     @relation(fields: [quizId], references: [id])
+    User                 User?     @relation(fields: [userId], references: [uuid])
+
+    @@index([quizId], map: "UserSession_quizId_fkey")
+    @@index([userId], map: "UserSession_userId_fkey")
+}
+
+enum EmailJob_chainType {
+    PERSONAL
+    GENERAL
+}
